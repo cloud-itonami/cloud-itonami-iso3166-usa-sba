@@ -6,5 +6,5 @@
   :head-role-note "institutional office title only; personal names of current office-holders are intentionally NOT stored"
   :contact-page "https://www.sba.gov/about-sba/organization/contact-sba"
   :sourced-from "official public contact page"
-  :hq {:line-en "409 3rd St SW, Washington, DC 20416" :line-local "409 3rd St SW, Washington, DC 20416" :postal-code "20416" :country "usa" :kind "headquarters" :provenance "https://www.sba.gov/about-sba/organization/contact-sba" :last-verified "2026-07-10" :sourcing "official-site-public" :phone "1-800-827-5722"}
+  :hq {:line-en "409 3rd St SW, Washington, DC 20416" :line-local "409 3rd St SW, Washington, DC 20416" :postal-code "20416" :phone "1-800-827-5722" :kind "headquarters" :provenance "https://www.sba.gov/about-sba/organization/contact-sba" :last-verified "2026-07-10" :sourcing "official-site-public" :country "usa"}
 }
