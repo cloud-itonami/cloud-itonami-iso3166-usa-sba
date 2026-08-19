@@ -1,0 +1,198 @@
+#!/usr/bin/env nbb
+;; Live citation gate for src/statute/facts.cljc.
+;;
+;;   nbb --classpath src tools/verify_citations.cljs
+;;
+;; Re-fetches the official eCFR versioner API and asserts THREE things:
+;;
+;;   1. PRESENCE -- every :statute/verified-label in `catalog` is still the
+;;      byte-exact label_description the API returns for that node, found by
+;;      WALKING the :statute/cfr-node path down the structure tree.
+;;   2. ABSENCE  -- every :absence/absent-label in `absences` is still absent
+;;      from the named CFR title at the named level.
+;;   3. The ALTERNATIVE each absence points at (:absence/see-instead) still
+;;      exists with its own byte-exact label. An absence whose "read this
+;;      instead" has itself vanished is not a usable answer.
+;;
+;; Why walk the path instead of matching the URL. Hierarchical CFR identifiers
+;; nest as substrings: "part 12" is a prefix of "part 121", "part 128" of
+;; nothing but "subpart C" occurs under every part in the title. A substring
+;; test over the URL accepts the wrong node and reports a pass. The sibling
+;; leaf usa-ftc landed with exactly that bug -- "/chapter-I" is contained in
+;; "/chapter-II", so a check written to keep another agency's chapter OUT
+;; admitted every one of its citations. We match (type, identifier) pairs
+;; exactly, level by level, so a wrong node cannot be mistaken for a right one.
+;;
+;; Why this does NOT curl :statute/url --
+;; www.ecfr.gov answers automated clients with HTTP 200 and a
+;; "Federal Register :: Request Access" interstitial instead of the
+;; regulation. A status-code check against those URLs reports success while
+;; proving nothing, which is the exact failure this gate is meant to close.
+;; We verify through the documented machine API instead.
+;;
+;; Exit codes are three-valued on purpose: 0 verified, 1 drifted/mismatched,
+;; 2 could-not-answer (network/API down, or nothing to check). 2 must never be
+;; read as a pass -- an empty catalog is not a clean catalog.
+(ns verify-citations
+  (:require [clojure.string :as str]
+            [statute.facts :as facts]))
+
+(defn- say [& msg] (println (str/join " " msg)))
+
+(defn- die [code & msg]
+  (apply say msg)
+  (js/process.exit code))
+
+;; ── fetch ─────────────────────────────────────────────────────────────────
+
+(defn fetch-json [url]
+  (-> (js/fetch url #js {:headers #js {"Accept" "application/json"
+                                       "User-Agent" "cloud-itonami-iso3166-usa-sba citation gate"}})
+      (.then (fn [r]
+               (if (.-ok r)
+                 (.json r)
+                 (throw (js/Error. (str "HTTP " (.-status r) " for " url))))))))
+
+;; ── tree walking ──────────────────────────────────────────────────────────
+
+(defn- children [node]
+  (or (get node "children") []))
+
+(defn- child-matching
+  "The single child of `node` whose (type, identifier) equals [t i] exactly.
+  No substring matching -- see the header comment."
+  [node t i]
+  (first (filter (fn [c]
+                   (and (= (get c "type") (name t))
+                        (= (str (get c "identifier")) i)))
+                 (children node))))
+
+(defn- walk-path
+  "Follow `path` ([[:chapter \"I\"] [:part \"128\"] ...]) from the title root.
+  Returns the node, or a map {:missing-at <level>} naming where it broke."
+  [root path]
+  (loop [node root, remaining path, seen []]
+    (if (empty? remaining)
+      node
+      (let [[t i] (first remaining)
+            hit (child-matching node t i)]
+        (if (nil? hit)
+          {:missing-at (str/join " > " (conj (mapv (fn [[t i]] (str (name t) " " i)) seen)
+                                             (str (name t) " " i)))}
+          (recur hit (rest remaining) (conj seen [t i])))))))
+
+(defn- label-of [node] (get node "label_description"))
+
+(defn- find-anywhere
+  "Every node in the tree whose label_description is exactly `label`, at the
+  given `type` level. Used for absence checks."
+  [root level label]
+  (let [out (atom [])]
+    ((fn walk [n]
+       (when (and (= (get n "type") (name level))
+                  (= (label-of n) label))
+         (swap! out conj (str (get n "identifier"))))
+       (doseq [c (children n)] (walk c)))
+     root)
+    @out))
+
+;; ── main ──────────────────────────────────────────────────────────────────
+
+(def all-entries (apply concat (vals facts/catalog)))
+
+(defn- check-entries [trees]
+  (reduce
+   (fn [failures e]
+     (let [root (get trees (:statute/verified-via e))
+           node (walk-path root (:statute/cfr-node e))]
+       (cond
+         (:missing-at node)
+         (conj failures
+               (str "MISSING  " (:statute/id e)
+                    "\n           expected node " (facts/node-path (:statute/cfr-node e))
+                    " in CFR title " (:statute/cfr-title e)
+                    "\n           but the tree has no " (:missing-at node)))
+
+         (not= (label-of node) (:statute/verified-label e))
+         (conj failures
+               (str "DRIFTED  " (:statute/id e)
+                    "\n           node     " (facts/node-path (:statute/cfr-node e))
+                    "\n           recorded " (pr-str (:statute/verified-label e))
+                    "\n           live     " (pr-str (label-of node))))
+
+         :else (do (say "  ok  " (:statute/id e)
+                        "--" (facts/node-path (:statute/cfr-node e)))
+                   failures))))
+   []
+   all-entries))
+
+(defn- check-absences [trees]
+  (reduce
+   (fn [failures a]
+     (let [root (get trees (:absence/verified-via a))
+           hits (find-anywhere root (:absence/absent-at-level a) (:absence/absent-label a))
+           alt (:absence/see-instead a)
+           alt-node (walk-path (get trees (:statute/verified-via alt)) (:statute/cfr-node alt))
+           f (cond-> failures
+               (seq hits)
+               (conj (str "ABSENCE BROKEN  " (:absence/id a)
+                          "\n           recorded as ABSENT: " (name (:absence/absent-at-level a))
+                          " labelled " (pr-str (:absence/absent-label a))
+                          " in CFR title " (:absence/cfr-title a)
+                          "\n           but it now EXISTS as " (name (:absence/absent-at-level a))
+                          " " (str/join ", " hits)
+                          "\n           the catalog's claim is now false and must be rewritten"))
+
+               (:missing-at alt-node)
+               (conj (str "ALTERNATIVE GONE  " (:absence/id a)
+                          "\n           the absence says to read " (:statute/law-number alt)
+                          " instead, but the tree has no " (:missing-at alt-node)))
+
+               (and (not (:missing-at alt-node))
+                    (not= (label-of alt-node) (:statute/verified-label alt)))
+               (conj (str "ALTERNATIVE DRIFTED  " (:absence/id a)
+                          "\n           " (:statute/law-number alt)
+                          "\n           recorded " (pr-str (:statute/verified-label alt))
+                          "\n           live     " (pr-str (label-of alt-node)))))]
+       (when (= f failures)
+         (say "  ok   absence" (:absence/id a)
+              "-- still absent; alternative" (:statute/law-number alt) "still present"))
+       f))
+   []
+   facts/absences))
+
+(defn- run []
+  ;; Evidence floor. An empty catalog must not be reported as a clean one.
+  (when (empty? all-entries)
+    (die 2 "COULD NOT ANSWER: catalog has 0 entries. Refusing to report a pass."))
+  (when (empty? facts/absences)
+    (die 2 "COULD NOT ANSWER: absences is empty."
+         "This catalog's central claim IS an absence; refusing to report a pass."))
+
+  (let [urls (into #{} (concat (map :statute/verified-via all-entries)
+                               (map :absence/verified-via facts/absences)
+                               (map (comp :statute/verified-via :absence/see-instead)
+                                    facts/absences)))]
+    (say "SCANNED\t" (count all-entries) "citations,"
+         (count facts/absences) "absences, across" (count urls) "API document(s)")
+    (-> (js/Promise.all (clj->js (map (fn [u] (.then (fetch-json u) #(vector u %))) urls)))
+        (.then
+         (fn [pairs]
+           ;; js->clj converts each structure document deeply into Clojure
+           ;; maps with string keys; the accessors above read them with `get`.
+           (let [trees (into {} (map vec (js->clj pairs)))
+                 failures (into (check-entries trees) (check-absences trees))]
+             (if (seq failures)
+               (do (say "")
+                   (doseq [f failures] (say f) (say ""))
+                   (die 1 "FAIL:" (count failures) "of"
+                        (+ (count all-entries) (count facts/absences))
+                        "checks did not hold."))
+               (say "\nOK:" (count all-entries) "citations byte-exact,"
+                    (count facts/absences) "absence(s) still absent"
+                    "and their alternatives still present.")))))
+        (.catch (fn [e]
+                  (die 2 "COULD NOT ANSWER: eCFR API unreachable --" (.-message e)
+                       "\nThis is exit 2, not a pass. Nothing was verified."))))))
+
+(run)
