@@ -34,7 +34,7 @@
 ;; 2 could-not-answer (network/API down, or nothing to check). 2 must never be
 ;; read as a pass -- an empty catalog is not a clean catalog.
 (ns verify-citations
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [statute.facts :as facts]))
 
 (defn- say [& msg] (println (str/join " " msg)))
