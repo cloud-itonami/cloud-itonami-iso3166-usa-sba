@@ -9,7 +9,7 @@
   substantive trap this catalog exists to close (SDVOSB certification lives in
   part 128, not part 125) cannot be silently un-closed by a later edit."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [statute.facts :as facts]))
 
 (def entries (facts/entries "USA-SBA"))
