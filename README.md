@@ -50,8 +50,8 @@ versioner API returned, the node path it was read from, and the date.
 ### Verifying
 
 ```bash
-nbb --classpath src tools/verify_citations.cljk   # live: re-fetches the eCFR API
-clojure -M:test                                    # offline: catalog invariants
+kbb --backend sci --classpath src tools/verify_citations.cljk   # live: re-fetches the eCFR API
+kbb -M:test                                    # offline: catalog invariants
 ```
 
 The live gate exits **0** verified / **1** drifted / **2** could-not-answer.
