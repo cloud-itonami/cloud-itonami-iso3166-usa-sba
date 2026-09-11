@@ -19,7 +19,7 @@ navigating **Small Business Administration**-specific public-procurement / regul
 
 ## Regulatory catalog (spec-basis)
 
-`src/statute/facts.cljc` carries **15 API-confirmed citations** into
+`src/statute/facts.cljk` carries **15 API-confirmed citations** into
 13 CFR chapter I — the SBA's own rule chapter — plus **1 checked absence**.
 Each entry records the byte-exact `label_description` the official eCFR
 versioner API returned, the node path it was read from, and the date.
@@ -50,7 +50,7 @@ versioner API returned, the node path it was read from, and the date.
 ### Verifying
 
 ```bash
-nbb --classpath src tools/verify_citations.cljs   # live: re-fetches the eCFR API
+nbb --classpath src tools/verify_citations.cljk   # live: re-fetches the eCFR API
 clojure -M:test                                    # offline: catalog invariants
 ```
 

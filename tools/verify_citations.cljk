@@ -1,7 +1,7 @@
 #!/usr/bin/env nbb
-;; Live citation gate for src/statute/facts.cljc.
+;; Live citation gate for src/statute/facts.cljk.
 ;;
-;;   nbb --classpath src tools/verify_citations.cljs
+;;   nbb --classpath src tools/verify_citations.cljk
 ;;
 ;; Re-fetches the official eCFR versioner API and asserts THREE things:
 ;;
