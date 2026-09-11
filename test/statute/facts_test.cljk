@@ -2,7 +2,7 @@
   "Offline invariants for the USA-SBA citation catalog.
 
   These tests never touch the network -- the live gate
-  (`tools/verify_citations.cljs`) owns the question `is this still true of the
+  (`tools/verify_citations.cljk`) owns the question `is this still true of the
   world?`. What these own is the question `is this catalog internally honest?`:
   that no entry claims a jurisdiction it does not cite, that the URL a human
   is sent to is the same node the machine verified, and that the one

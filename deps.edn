@@ -17,7 +17,7 @@
   ;; Verifies citations, the recorded absence, AND the alternative that
   ;; absence points at.
   ;; Exit 0 verified / 1 drifted / 2 could-not-answer.
-  ;;   nbb --classpath src tools/verify_citations.cljs
+  ;;   nbb --classpath src tools/verify_citations.cljk
   :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
          :main-opts ["-m" "clj-kondo.main"
                      "--lint" "src" "test"
