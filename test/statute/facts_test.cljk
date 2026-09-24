@@ -8,7 +8,7 @@
   is sent to is the same node the machine verified, and that the one
   substantive trap this catalog exists to close (SDVOSB certification lives in
   part 128, not part 125) cannot be silently un-closed by a later edit."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.text :as str]
             [statute.facts :as facts]))
 
